@@ -229,7 +229,7 @@ Resources:
             VolumeSize: "8"
       ImageId: !FindInMap
         - RegionMap
-        - !Ref 'AWS::Region'
+        - !Ref AWS::Region
         - HVM64
       InstanceType: t2.micro
       KeyName: !Ref KeyPair
@@ -260,109 +260,64 @@ Resources:
     Properties:
       DefaultActions:
         - Type: forward
-          TargetGroupArn: !Ref ALBTG
+          TargetGroupArn: !Ref TargetGroup
       LoadBalancerArn: !Ref ALB
       Port: 80
       Protocol: HTTP
 
-  ALBTG:
+  TargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
-      HealthCheckIntervalSeconds: 6
-      HealthCheckProtocol: HTTP
-      HealthCheckTimeoutSeconds: 5
-      HealthyThresholdCount: 2
-      Matcher:
-        HttpCode: '200'
-      Name: AppTargets
       Port: 80
       Protocol: HTTP
-      Targets:
-      - Id: !Ref EC2App1
-        Port: 80
-      - Id: !Ref EC2App2
-        Port: 80
       VpcId: !Ref VPC
-      Tags:
-        - Key: Name 
-          Value: ALB-TargetGroup
-
-  EC2App1:
-    Type: AWS::EC2::Instance
-    Properties: 
-      AvailabilityZone: !Sub ${Region}a
-      BlockDeviceMappings: 
-        - DeviceName: "/dev/xvda"
-          Ebs: 
-            VolumeType: "gp2"
-            DeleteOnTermination: "true"
-            VolumeSize: "8"
-      ImageId: !FindInMap
-        - RegionMap
-        - !Ref 'AWS::Region'
-        - HVM64
-      UserData:
-        Fn::Base64:
-          Fn::Sub:
-            - |
-              #!/bin/bash
-              aws ec2 wait nat-gateway-available --nat-gateway-ids {gateway}
-              sudo yum update -y
-              sudo yum install httpd -y
-              sudo service httpd start
-              sudo chkconfig httpd on
-              cd var/www/html
-              echo "<html><h1>hello test</h1></html>" > index.html
-            - {
-              gateway: !Ref NATGW
-              }
+      
+  AutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AvailabilityZones: !GetAZs
+      LaunchConfigurationName: !Ref LaunchConfiguration
+      MinSize: 2
+      MaxSize: 2
+      TargetGroupARNs: 
+        - !Ref TargetGroup
+        
+  LaunchConfiguration:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Metadata: 
+      Comment: Install httpd and php
+      AWS::CloudFormation::Init:
+        config: 
+          packages: 
+            yum:
+              httpd: []
+              php: []
+          files: 
+            /var/www/html/index.php:
+              content: !Sub |
+                <?php print "hello test"; ?>
+          services: 
+            sysvinit:
+              httpd:
+                enabled: true
+                ensureRunning: true
+    Properties:
+      KeyName: !Ref MyKeyPair
       InstanceType: t2.micro
-      KeyName: !Ref KeyPair
-      NetworkInterfaces: 
-        - AssociatePublicIpAddress: "false"
-          DeviceIndex: "0"
-          SubnetId: !Ref PrivateSubnet1
-          GroupSet: 
-            - !Ref EC2SG
-      Tags: 
-        - Key: Name 
-          Value: EC2-1
-
-  EC2App2:
-    Type: AWS::EC2::Instance
-    Properties: 
-      AvailabilityZone: !Sub ${Region}b
-      BlockDeviceMappings: 
-        - DeviceName: "/dev/xvda"
-          Ebs: 
-            VolumeType: "gp2"
-            DeleteOnTermination: "true"
-            VolumeSize: "8"
-      ImageId: !FindInMap
+      SecurityGroups:
+        - !Ref EC2SecurityGroup
+      ImageId:
+        Fn::FindInMap:
         - RegionMap
-        - !Ref 'AWS::Region'
+        - !Ref AWS::Region
         - HVM64
       UserData:
-        Fn::Base64:
-          Fn::Sub:
-            - |
-              #!/bin/bash
-              aws ec2 wait nat-gateway-available --nat-gateway-ids {gateway}
-              sudo yum update -y
-              sudo yum install -y httpd
-              sudo service httpd start
-              sudo chkconfig httpd on
-            - {
-              gateway: !Ref NATGW
-              }
-      InstanceType: t3.micro
-      KeyName: !Ref KeyPair
-      NetworkInterfaces: 
-        - AssociatePublicIpAddress: "false"
-          DeviceIndex: "0"
-          SubnetId: !Ref PrivateSubnet2
-          GroupSet: 
-            - !Ref EC2SG
-      Tags: 
-        - Key: Name 
-          Value: EC2-2
+        'Fn::Base64': 
+          !Sub |
+            #!/bin/bash -xe                        
+            # Ensure AWS CFN Bootstrap is the latest
+            yum install -y aws-cfn-bootstrap
+            # Install the files and packages from the metadata
+            /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource LaunchConfiguration --region ${AWS::Region}    
+                
+

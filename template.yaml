@@ -1,86 +1,44 @@
 Parameters: 
   Region: 
     Type: String
-    Default: eu-west-1
+    Default: us-west-2
     AllowedValues: 
-      - eu-west-1
-      - eu-west-2
-      - eu-west-3
-      - eu-central-1
       - us-west-2
-      - us-west-1
-      - us-east-2
-      - us-east-1
-      - ap-south-1
-      - ap-northeast-2
-      - ap-northeast-1
-      - ap-southeast-2
-      - ap-southeast-1
-      - ca-central-1
-      - sa-east-1
-    Description: Enter the AWS region to deploy stack. Default is eu-west-1
+    Description: Enter the AWS region to deploy stack. Default is us-west-2
   VPCCidr:
     AllowedPattern: '((\d{1,3})\.){3}\d{1,3}/\d{1,2}'
     Type: String
     Default: 10.0.0.0/16
-    Description: Enter the CIDR for your VPC
+    Description: Enter the CIDR for your VPC, Default 10.0.0.0/16
   PublicSubnet1Cidr:
     AllowedPattern: '((\d{1,3})\.){3}\d{1,3}/\d{1,2}'
     Type: String
     Default: 10.0.1.0/24
-    Description: Enter the CIDR for your Public Subnet 1
+    Description: Enter the CIDR for your Public Subnet 1, Default 10.0.1.0/24
   PublicSubnet2Cidr:
     AllowedPattern: '((\d{1,3})\.){3}\d{1,3}/\d{1,2}'
     Type: String
     Default: 10.0.2.0/24
-    Description: Enter the CIDR for your Public Subnet 2
+    Description: Enter the CIDR for your Public Subnet 2, Default 10.0.2.0/24
   PrivateSubnet1Cidr:
     AllowedPattern: '((\d{1,3})\.){3}\d{1,3}/\d{1,2}'
     Type: String
     Default: 10.0.3.0/24
-    Description: Enter the CIDR for your Private Subnet 1
+    Description: Enter the CIDR for your Private Subnet 1, Default 10.0.3.0/24
   PrivateSubnet2Cidr:
     AllowedPattern: '((\d{1,3})\.){3}\d{1,3}/\d{1,2}'
     Type: String
     Default: 10.0.4.0/24
-    Description: Enter the CIDR for your Private Subnet 2
+    Description: Enter the CIDR for your Private Subnet 2, Default 10.0.4.0/24
   KeyPair:
     Type: String
-    Default: demo-key
-    Description: Enter name of pre-generated KeyPair
+    Default: MyKeyPair
+    Description: Select a pre-generated KeyPair. You need to create one first if you haven't.
 
 Mappings: 
   RegionMap: 
-    eu-west-1: 
-      HVM64: ami-047bb4163c506cd98
-    eu-west-2: 
-      HVM64: ami-f976839e
-    eu-west-3:
-      HVM64: ami-0ebc281c20e89ba4b
-    eu-central-1: 
-      HVM64: ami-0233214e13e500f77
     us-west-2:
       HVM64: ami-0b59bfac6be064b78
-    us-west-1:
-      HVM64: ami-0bdb828fd58c52235
-    us-east-2:
-      HVM64: ami-a0cfeed8
-    us-east-1:
-      HVM64: ami-0ff8a91507f77f867
-    ap-south-1:
-      HVM64: ami-0912f71e06545ad88
-    ap-northeast-2:
-      HVM64: ami-0a10b2721688ce9d2
-    ap-northeast-1:
-      HVM64: ami-06cd52961ce9f0d85
-    ap-southeast-2:
-      HVM64: ami-09b42976632b27e9b
-    ap-southeast-1:
-      HVM64: ami-08569b978cc4dfa10
-    ca-central-1:
-      HVM64: ami-0b18956f
-    sa-east-1:
-      HVM64: ami-07b14488da8ea02a0
 
 Resources:
   VPC:
@@ -89,7 +47,7 @@ Resources:
       CidrBlock: !Ref VPCCidr
       Tags:
         - Key: Name
-          Value: VPC-1 
+          Value: MyVPC 
 
   PublicSubnet1:
     Type: AWS::EC2::Subnet
@@ -136,7 +94,7 @@ Resources:
     Properties: 
       Tags:
         -  Key: Name 
-           Value: IG
+           Value: IntGateway
 
   AttachIGtoVPC:
     Type: AWS::EC2::VPCGatewayAttachment
@@ -150,7 +108,7 @@ Resources:
       VpcId: !Ref VPC
       Tags:
         - Key: Name
-          Value: Public-RT
+          Value: Public-RouteTable
 
   PrivateRT:
     Type: AWS::EC2::RouteTable
@@ -158,7 +116,7 @@ Resources:
       VpcId: !Ref VPC
       Tags:
         - Key: Name 
-          Value: Private-RT
+          Value: Private-RouteTable
 
   AssociatePublicSubnet1ToPublicRT:
     Type: AWS::EC2::SubnetRouteTableAssociation
@@ -198,7 +156,7 @@ Resources:
       NatGatewayId: !Ref NATGW
       RouteTableId: !Ref PrivateRT
 
-  # Create EIP which will be used by the NAT Gateway
+  # Create Elastic IP which will be used by the NAT Gateway
   NATEIP:
     Type: AWS::EC2::EIP
     Properties:
@@ -310,7 +268,7 @@ Resources:
   ALBTG:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
-      HealthCheckIntervalSeconds: 30
+      HealthCheckIntervalSeconds: 6
       HealthCheckProtocol: HTTP
       HealthCheckTimeoutSeconds: 5
       HealthyThresholdCount: 2
@@ -327,7 +285,7 @@ Resources:
       VpcId: !Ref VPC
       Tags:
         - Key: Name 
-          Value: ALB-TG
+          Value: ALB-TargetGroup
 
   EC2App1:
     Type: AWS::EC2::Instance
@@ -350,9 +308,11 @@ Resources:
               #!/bin/bash
               aws ec2 wait nat-gateway-available --nat-gateway-ids {gateway}
               sudo yum update -y
-              sudo yum install -y httpd
+              sudo yum install httpd -y
               sudo service httpd start
               sudo chkconfig httpd on
+              cd var/www/html
+              echo "<html><h1>hello test</h1></html>" > index.html
             - {
               gateway: !Ref NATGW
               }

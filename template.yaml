@@ -293,9 +293,12 @@ Resources:
               httpd: []
               php: []
           files: 
-            /var/www/html/index.php:
+            /var/www/html/site1/index.php:
               content: !Sub |
                 <?php print "hello test"; ?>
+            /var/www/html/site2/index.php:
+              content: !Sub |
+                <?php print "hello test2"; ?>
           services: 
             sysvinit:
               httpd:
